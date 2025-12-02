@@ -1,145 +1,123 @@
 // src/index.mjs
-// MCP Radio Việt Nam – Chuẩn hoàn thiện cho Render + imcp.pro
+// Viet Radio MCP – Web player + API + MCP health endpoint
 
 import express from "express";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { z } from "zod";
 
-// ==== Định danh đường dẫn ====
+// === Chuẩn hoá __dirname cho ES module ===
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PORT = process.env.PORT || 10000;
-const app = express();
-app.use(express.json());
 
-// ==== Đọc danh sách kênh radio ====
+// === Khởi tạo app ===
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Parse JSON cho các API thường (không ảnh hưởng /mcp)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// === Nạp danh sách kênh radio từ channels.json ===
 const CHANNELS_FILE = path.join(__dirname, "../channels.json");
+
 let CHANNELS = [];
 try {
   const raw = fs.readFileSync(CHANNELS_FILE, "utf8");
-  const data = JSON.parse(raw);
-  CHANNELS = Array.isArray(data) ? data : data.channels || [];
-  console.log(`✅ Đã nạp ${CHANNELS.length} kênh từ channels.json`);
+  CHANNELS = JSON.parse(raw);
+  console.log(`✅ Đã nạp ${CHANNELS.length} kênh radio từ channels.json`);
 } catch (err) {
   console.error("❌ Lỗi đọc channels.json:", err);
+  CHANNELS = [];
 }
 
-// ==== Web player ====
-app.use(express.static(path.join(__dirname, "..")));
-app.get("/", (_req, res) => res.redirect("/player.html"));
+// === Serve file tĩnh (player.html, favicon, v.v.) ===
+app.use(express.static(path.join(__dirname, "../")));
 
-// ==== API danh sách ====
-app.get("/radio/channels", (_req, res) => res.json(CHANNELS));
+// === Trang root đơn giản ===
+app.get("/", (req, res) => {
+  res.send(
+    'Viet Radio MCP đang chạy.<br>• Mở <a href="/player.html">/player.html</a> để test web radio.<br>• MCP endpoint: <code>/mcp</code>.'
+  );
+});
 
-// ==== API phát kênh ====
+// === API: trả danh sách kênh ===
+app.get("/radio/channels", (req, res) => {
+  res.json(CHANNELS);
+});
+
+// === API: phát kênh (redirect tới stream thực tế) ===
 app.get("/radio/play", (req, res) => {
   const id = req.query.id;
   const ch = CHANNELS.find((c) => String(c.id) === String(id));
-  if (!ch) return res.status(404).send("Không tìm thấy kênh");
 
-  const stream = ch.streamUrl || ch.streamSrc || ch.url || ch.hls || ch.mp3;
-  if (!stream) return res.status(400).send("Kênh này chưa có stream URL");
-  console.log(`▶️ Phát: ${ch.name} → ${stream}`);
-  res.redirect(stream);
-});
-
-// ====================================================================
-//                           MCP SERVER
-// ====================================================================
-const mcpServer = new McpServer({
-  name: "vn-radio-mcp",
-  version: "1.0.0",
-});
-
-// === Tool 1: Liệt kê danh sách kênh ===
-mcpServer.registerTool(
-  "list_channels",
-  {
-    title: "Liệt kê các kênh radio Việt Nam",
-    description: "Trả về danh sách từ channels.json",
-    inputSchema: z.object({}),
-  },
-  async () => ({
-    content: [{ type: "text", text: JSON.stringify(CHANNELS, null, 2) }],
-  })
-);
-
-// === Tool 2: Lấy URL stream ===
-mcpServer.registerTool(
-  "get_stream_url",
-  {
-    title: "Lấy URL stream của kênh",
-    description: "Nhập ID để lấy link phát trực tiếp",
-    inputSchema: z.object({
-      id: z.string().describe("ID kênh radio (ví dụ: voh-fm-99-9)"),
-    }),
-  },
-  async ({ id }) => {
-    const ch = CHANNELS.find((c) => String(c.id) === String(id));
-    if (!ch) {
-      return {
-        content: [{ type: "text", text: `Không tìm thấy kênh ${id}` }],
-        isError: true,
-      };
-    }
-    const stream = ch.streamUrl || ch.streamSrc || ch.url || ch.hls || ch.mp3;
-    if (!stream) {
-      return {
-        content: [
-          { type: "text", text: `Kênh ${id} chưa có stream URL hợp lệ.` },
-        ],
-        isError: true,
-      };
-    }
-    return { content: [{ type: "text", text: stream }], isError: false };
+  if (!ch) {
+    return res.status(404).send("Không tìm thấy kênh");
   }
-);
 
-// ====================================================================
-//                      MCP endpoint (GET + POST)
-// ====================================================================
+  const src = ch.streamSrc;
+  console.log("▶️ Yêu cầu phát kênh:", ch.name, "=>", src);
 
-// Cho phép GET: hiển thị handshake JSON (để test)
+  // MP3 / AAC / HLS: cứ redirect cho client tự play
+  if (
+    typeof src === "string" &&
+    (src.endsWith(".mp3") || src.endsWith(".aac") || src.endsWith(".m3u8"))
+  ) {
+    return res.redirect(src);
+  }
+
+  return res.status(400).send("Không nhận diện được định dạng stream");
+});
+
+// ===================================================================
+// MCP HTTP endpoint – ở mức hiện tại: health check + stub JSON-RPC
+// ===================================================================
+
+// GET /mcp: discovery + health cho IMCPro / client MCP
 app.get("/mcp", (req, res) => {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.json({
-    mcpVersion: "2024-01",
+    mcpVersion: "2024-11-05",
     name: "vn-radio-mcp",
     capabilities: ["streamable-http"],
     status: "ok",
-    info: "MCP server Radio Việt Nam hoạt động bình thường",
+    info: "MCP server Radio Việt Nam chạy bình thường (health check).",
   });
 });
 
-// Cho phép POST: cho IMCP.pro dùng streamable HTTP
-app.post("/mcp", async (req, res) => {
-  try {
-    const transport = new StreamableHTTPServerTransport(app, "/mcp", {
-      mcpServer,
-    });
-    await mcpServer.connect(transport);
-    res.json({
-      mcpVersion: "2024-01",
-      status: "ready",
-      message: "MCP streamable endpoint active",
-    });
-  } catch (err) {
-    console.error("❌ MCP error:", err);
-    res.status(500).send("MCP internal error");
-  }
+// POST /mcp: stub JSON-RPC (chỉ để báo là server nhận được request)
+// Sau này nếu mình gắn SDK @modelcontextprotocol thì chỉ cần
+// thay thân hàm này bằng gọi McpServer + StreamableHTTPServerTransport.
+app.post("/mcp", (req, res) => {
+  console.log("📥 Nhận POST /mcp – body:", JSON.stringify(req.body));
+
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+  const rpcId =
+    req.body && Object.prototype.hasOwnProperty.call(req.body, "id")
+      ? req.body.id
+      : null;
+
+  // Trả đúng format JSON-RPC 2.0 để client không bị 500 vì parse lỗi
+  res.json({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message:
+        "vn-radio-mcp mới cấu hình health check. Tool MCP chi tiết (list_channels, v.v.) chưa được implement.",
+    },
+    id: rpcId,
+  });
 });
 
-// ====================================================================
-//                            KHỞI ĐỘNG
-// ====================================================================
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("=========================================");
-  console.log(`✅ MCP Radio Việt Nam đang chạy tại: http://localhost:${PORT}`);
-  console.log(" - Web player:      /player.html");
-  console.log(" - API danh sách:   /radio/channels");
-  console.log(" - MCP endpoint:    /mcp (GET & POST)");
-  console.log("=========================================");
+// === Khởi động server ===
+app.listen(PORT, () => {
+  console.log("/////////////////////////////////////////////");
+  console.log("✅ Viet Radio MCP đang chạy!");
+  console.log(`🌐 Web server:        http://localhost:${PORT}`);
+  console.log("▶ Web player:        /player.html");
+  console.log("▶ API danh sách kênh: /radio/channels");
+  console.log("▶ API play:          /radio/play?id=<id>");
+  console.log("▶ MCP endpoint:      /mcp (GET health, POST JSON-RPC stub)");
+  console.log("/////////////////////////////////////////////");
 });
