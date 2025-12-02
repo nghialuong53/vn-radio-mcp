@@ -1,0 +1,30 @@
+[
+  {
+    "id": "voh-999",
+    "name": "VOH FM 99.9 MHz",
+    "description": "Kênh VOH FM 99.9 MHz – Thời sự, chính trị, tổng hợp.",
+    "website": "https://voh.com.vn/",
+    "streamSrc": "https://strm.voh.com.vn/radio/channel1/playlist.m3u8"
+  },
+  {
+    "id": "voh-956",
+    "name": "VOH FM 95.6 MHz",
+    "description": "Kênh VOH FM 95.6 MHz – Văn hóa, xã hội, giáo dục.",
+    "website": "https://voh.com.vn/",
+    "streamSrc": "https://strm.voh.com.vn/radio/channel2/playlist.m3u8"
+  },
+  {
+    "id": "voh-877",
+    "name": "VOH FM 87.7 MHz",
+    "description": "Kênh VOH FM 87.7 MHz – Âm nhạc và giải trí.",
+    "website": "https://voh.com.vn/",
+    "streamSrc": "https://strm.voh.com.vn/radio/channel3/playlist.m3u8"
+  },
+  {
+    "id": "voh-am610",
+    "name": "VOH AM 610 KHz",
+    "description": "Kênh VOH AM 610 KHz – Thời sự và chính luận.",
+    "website": "https://voh.com.vn/",
+    "streamSrc": "https://strm.voh.com.vn/radio/channel5/playlist.m3u8"
+  }
+]

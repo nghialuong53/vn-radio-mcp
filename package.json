@@ -1,0 +1,14 @@
+{
+  "name": "viet-radio-mcp",
+  "version": "1.0.0",
+  "description": "MCP server Radio Việt Nam (VOH, VOV, ...)",
+  "type": "module",
+  "main": "src/index.mjs",
+  "scripts": {
+    "start": "node src/index.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@modelcontextprotocol/sdk": "^1.2.0"
+  }
+}

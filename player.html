@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Test Radio Việt Nam (viet-radio-mcp)</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 16px;
+      background: #111;
+      color: #eee;
+    }
+    h1 { color: #00bcd4; }
+    .channel {
+      margin-bottom: 10px;
+      padding: 8px;
+      background: #222;
+      border-radius: 8px;
+    }
+    button {
+      background: #00bcd4;
+      color: #fff;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover { background: #008c9e; }
+    video {
+      width: 100%;
+      margin-top: 20px;
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Test Radio Việt Nam (viet-radio-mcp)</h1>
+  <p>Trang này phát được cả HLS (.m3u8) và MP3. Hiện đang test bằng file MP3 mẫu.</p>
+
+  <div id="channels"></div>
+  <hr />
+  <video id="player" controls></video>
+
+  <script>
+    let hls = null;
+
+    async function loadChannels() {
+      const res = await fetch("/radio/channels");
+      const data = await res.json();             // server trả về MẢNG
+      const channels = Array.isArray(data) ? data : (data.channels || []);
+      const wrap = document.getElementById("channels");
+      wrap.innerHTML = "";
+
+      channels.forEach(ch => {
+        const div = document.createElement("div");
+        div.className = "channel";
+
+        const btn = document.createElement("button");
+        btn.textContent = "Nghe";
+        btn.onclick = () => playChannel(ch);
+
+        div.textContent = `${ch.name} – ${ch.description || ""} `;
+        div.appendChild(btn);
+        wrap.appendChild(div);
+      });
+    }
+
+    async function playChannel(ch) {
+      const player = document.getElementById("player");
+      const url = ch.streamSrc;
+      console.log("Phát trực tiếp:", url);
+
+      // Hủy HLS cũ nếu có
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+
+      // Nếu là HLS (.m3u8) thì dùng hls.js
+      if (url.endsWith(".m3u8")) {
+        if (Hls.isSupported()) {
+          hls = new Hls();
+          hls.loadSource(url);
+          hls.attachMedia(player);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            player.play();
+          });
+          hls.on(Hls.Events.ERROR, (evt, err) => {
+            console.error("HLS error:", err);
+          });
+        } else if (player.canPlayType("application/vnd.apple.mpegurl")) {
+          player.src = url;
+          player.play();
+        } else {
+          alert("Trình duyệt này không hỗ trợ HLS.");
+        }
+      } else {
+        // MP3 / AAC → phát thẳng
+        player.src = url;
+        player.play().catch(err => {
+          console.error("Lỗi play():", err);
+        });
+      }
+    }
+
+    loadChannels().catch(err => console.error("Lỗi loadChannels:", err));
+  </script>
+</body>
+</html>

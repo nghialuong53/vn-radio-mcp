@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "viet-radio-mcp": {
+      "command": "node",
+      "args": [
+        "src/index.mjs"
+      ],
+      "env": {}
+    }
+  }
+}
